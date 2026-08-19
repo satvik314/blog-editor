@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inkwell — a blog editor that shows its work</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖋️</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand" id="brand" title="Inkwell">
+          <span class="brand-drop" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none">
+              <path
+                d="M12 2.5c3.4 4.6 6.5 8 6.5 12a6.5 6.5 0 1 1-13 0c0-4 3.1-7.4 6.5-12Z"
+                fill="url(#inkGrad)"
+              />
+              <circle cx="9.8" cy="14.6" r="1.6" fill="#fff" opacity="0.55" />
+              <defs>
+                <linearGradient id="inkGrad" x1="5" y1="4" x2="19" y2="21">
+                  <stop stop-color="#6C5CE7" />
+                  <stop offset="1" stop-color="#FF5C7C" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </span>
+          <span class="brand-name">Inkwell</span>
+          <span class="brand-tag">every change, tracked</span>
+        </div>
+
+        <div class="topbar-center">
+          <div class="version-rail" id="versionRail" aria-label="Version history"></div>
+        </div>
+
+        <div class="topbar-right">
+          <button class="icon-btn" id="settingsBtn" title="Settings (API key & model)" aria-label="Settings">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3.2" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <!-- LEFT: the draft -->
+        <section class="pane pane-left">
+          <div class="pane-head">
+            <h2 class="pane-title"><span class="pane-emoji">📝</span> Your draft</h2>
+            <div class="draft-meta">
+              <span class="meta-chip" id="wordCount">0 words</span>
+            </div>
+          </div>
+
+          <div class="draft-wrap">
+            <textarea
+              id="draftInput"
+              class="draft-input"
+              spellcheck="false"
+              placeholder="Paste rough text, bullet notes, or a table of contents…
+
+For example:
+
+# Why Slow Mornings Make Fast Founders
+- the myth of the 5am grind
+- what deep rest actually does to decision-making
+- a 20-minute ritual anyone can steal
+- closing: slow is smooth, smooth is fast"
+            ></textarea>
+          </div>
+
+          <div class="instruction-bar">
+            <div class="instruction-field">
+              <span class="instruction-spark" aria-hidden="true">✦</span>
+              <input
+                id="instructionInput"
+                type="text"
+                autocomplete="off"
+                placeholder='Tell Inkwell what to do… e.g. "Write a friendly 600-word blog from this outline"'
+              />
+            </div>
+            <button class="btn-generate" id="generateBtn">
+              <span class="btn-generate-shine" aria-hidden="true"></span>
+              <span class="btn-generate-label">
+                <span class="btn-text">Generate</span>
+                <span class="btn-kbd">⌘⏎</span>
+              </span>
+              <span class="btn-generate-loader" aria-hidden="true">
+                <i></i><i></i><i></i>
+              </span>
+            </button>
+          </div>
+        </section>
+
+        <div class="pane-divider" aria-hidden="true">
+          <span class="divider-orb" id="dividerOrb">✦</span>
+        </div>
+
+        <!-- RIGHT: the blog + change tracking -->
+        <section class="pane pane-right">
+          <div class="pane-head">
+            <div class="seg" id="viewToggle" role="tablist">
+              <button class="seg-btn is-active" data-view="blog" role="tab">📖 Blog</button>
+              <button class="seg-btn" data-view="diff" role="tab">
+                🔍 Changes
+                <span class="seg-badge" id="changesBadge" hidden>0</span>
+              </button>
+            </div>
+
+            <div class="stats-bar" id="statsBar" hidden>
+              <span class="stat stat-add" title="Lines added">+<b id="statAdd">0</b></span>
+              <span class="stat stat-mod" title="Lines modified">~<b id="statMod">0</b></span>
+              <span class="stat stat-del" title="Lines removed">−<b id="statDel">0</b></span>
+            </div>
+
+            <div class="output-actions">
+              <button class="icon-btn" id="copyBtn" title="Copy markdown" hidden>
+                <svg class="ic-copy" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="12" height="12" rx="2.5" />
+                  <path d="M5 15H4.5A2.5 2.5 0 0 1 2 12.5v-8A2.5 2.5 0 0 1 4.5 2h8A2.5 2.5 0 0 1 15 4.5V5" />
+                </svg>
+                <svg class="ic-check" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </button>
+              <button class="btn-ghost" id="adoptBtn" title="Copy this version into the left pane and keep iterating" hidden>
+                ⤺ Make this my draft
+              </button>
+            </div>
+          </div>
+
+          <div class="output-body" id="outputBody">
+            <!-- empty state -->
+            <div class="empty-state" id="emptyState">
+              <div class="empty-ink" aria-hidden="true">🫙</div>
+              <h3>The inkwell is full. The page is not.</h3>
+              <p>
+                Drop a draft or an outline on the left, tell Inkwell what you want,
+                and watch the blog appear here — with
+                <span class="hl hl-add">added</span>,
+                <span class="hl hl-mod">tweaked</span> and
+                <span class="hl hl-del">removed</span>
+                lines tracked on every revision.
+              </p>
+              <p class="empty-hint">Press <kbd>⌘</kbd><kbd>⏎</kbd> to generate</p>
+            </div>
+
+            <!-- rendered blog -->
+            <article class="blog-view" id="blogView" hidden></article>
+
+            <!-- change tracking -->
+            <div class="diff-view" id="diffView" hidden>
+              <div class="diff-legend">
+                <span class="legend-item"><i class="dot dot-add"></i> added</span>
+                <span class="legend-item"><i class="dot dot-mod"></i> modified</span>
+                <span class="legend-item"><i class="dot dot-del"></i> removed</span>
+                <span class="diff-compare-label" id="diffCompareLabel"></span>
+              </div>
+              <div class="diff-table" id="diffTable"></div>
+            </div>
+          </div>
+
+          <div class="stream-caret-note" id="streamNote" hidden>
+            <span class="pulse-dot"></span> Inkwell is writing…
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Settings modal -->
+    <div class="modal-backdrop" id="settingsModal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="modal-head">
+          <h3 id="settingsTitle">⚙️ Settings</h3>
+          <button class="icon-btn" id="settingsClose" aria-label="Close">✕</button>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Gemini API key</span>
+          <input type="password" id="apiKeyInput" placeholder="AIza…" autocomplete="off" />
+          <span class="field-hint">
+            Stored only in your browser. You can also set <code>VITE_GEMINI_API_KEY</code> in a
+            <code>.env.local</code> file. Get a key at
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Google AI Studio</a>.
+          </span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Model</span>
+          <select id="modelSelect">
+            <option value="gemini-3.7-flash">gemini-3.7-flash (latest, recommended)</option>
+            <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Thinking level <small>(Gemini 3 models)</small></span>
+          <select id="thinkingSelect">
+            <option value="MINIMAL">Minimal — fastest</option>
+            <option value="LOW" selected>Low — snappy (default)</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="HIGH">High — deepest reasoning</option>
+          </select>
+        </label>
+
+        <div class="modal-foot">
+          <button class="btn-ghost btn-danger" id="clearHistoryBtn">🗑 Clear version history</button>
+          <button class="btn-primary" id="settingsSave">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast-host" id="toastHost" aria-live="polite"></div>
+    <div class="confetti-host" id="confettiHost" aria-hidden="true"></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
