@@ -11,6 +11,17 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap"
       rel="stylesheet"
     />
+    <script>
+      // Apply the saved (or system) theme before first paint to avoid a flash.
+      try {
+        var s = JSON.parse(localStorage.getItem('inkwell.settings.v1') || '{}');
+        document.documentElement.dataset.theme =
+          s.theme ||
+          (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'midnight' : 'paper');
+      } catch (e) {
+        document.documentElement.dataset.theme = 'paper';
+      }
+    </script>
   </head>
   <body>
     <div id="app">
@@ -40,6 +51,22 @@
         </div>
 
         <div class="topbar-right">
+          <div class="theme-wrap">
+            <button class="icon-btn" id="themeBtn" title="Theme" aria-label="Theme" aria-haspopup="true" aria-expanded="false">
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2.5a9.5 9.5 0 1 0 0 19c1.2 0 2-.9 2-2 0-.55-.22-1.03-.55-1.4-.33-.36-.55-.85-.55-1.35 0-1.1.9-2 2-2h2.35a4.25 4.25 0 0 0 4.25-4.25C21.5 6 17.2 2.5 12 2.5Z" />
+                <circle cx="7.5" cy="10.5" r="1.15" fill="currentColor" stroke="none" />
+                <circle cx="12" cy="7.3" r="1.15" fill="currentColor" stroke="none" />
+                <circle cx="16.5" cy="10.5" r="1.15" fill="currentColor" stroke="none" />
+              </svg>
+            </button>
+            <div class="theme-menu" id="themeMenu" hidden role="menu" aria-label="Choose theme">
+              <button class="theme-opt" data-theme="paper" role="menuitem"><span class="swatch swatch-paper"></span> Paper <small>warm light</small></button>
+              <button class="theme-opt" data-theme="sepia" role="menuitem"><span class="swatch swatch-sepia"></span> Sepia <small>old library</small></button>
+              <button class="theme-opt" data-theme="midnight" role="menuitem"><span class="swatch swatch-midnight"></span> Midnight <small>dark</small></button>
+              <button class="theme-opt" data-theme="noir" role="menuitem"><span class="swatch swatch-noir"></span> Noir <small>candlelit</small></button>
+            </div>
+          </div>
           <button class="icon-btn" id="settingsBtn" title="Settings (API key & model)" aria-label="Settings">
             <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3.2" />
@@ -86,6 +113,18 @@ For example:
                 placeholder='Tell Inkwell what to do… e.g. "Write a friendly 600-word blog from this outline"'
               />
             </div>
+            <button
+              class="btn-web"
+              id="webSearchBtn"
+              title="Ground answers with Google Search — Gemini fetches live web results"
+              aria-pressed="false"
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9.2" />
+                <path d="M2.8 12h18.4M12 2.8c2.6 2.5 3.9 5.7 3.9 9.2s-1.3 6.7-3.9 9.2c-2.6-2.5-3.9-5.7-3.9-9.2S9.4 5.3 12 2.8Z" />
+              </svg>
+              <span class="btn-web-label">Web</span>
+            </button>
             <button class="btn-generate" id="generateBtn">
               <span class="btn-generate-shine" aria-hidden="true"></span>
               <span class="btn-generate-label">
@@ -150,6 +189,18 @@ For example:
                 lines tracked on every revision.
               </p>
               <p class="empty-hint">Press <kbd>⌘</kbd><kbd>⏎</kbd> to generate</p>
+
+              <div class="starters" id="starters">
+                <div class="starters-head">
+                  <span class="starters-title">✦ Need a spark? Fresh ideas every visit</span>
+                  <button class="icon-btn icon-btn-sm" id="refreshStartersBtn" title="Deal me new ideas" aria-label="Refresh starters">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v5h-5" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="starters-row" id="startersRow"></div>
+              </div>
             </div>
 
             <!-- rendered blog -->

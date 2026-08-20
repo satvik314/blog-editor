@@ -1,6 +1,6 @@
 import './style.css';
 import { marked } from 'marked';
-import { streamBlog, cleanOutput } from './gemini.js';
+import { streamBlog, cleanOutput, fetchStarters } from './gemini.js';
 import { computeLineDiff, diffStats, collapseContext } from './diff-engine.js';
 
 marked.setOptions({ gfm: true, breaks: false });
@@ -12,16 +12,22 @@ marked.setOptions({ gfm: true, breaks: false });
 const SETTINGS_KEY = 'inkwell.settings.v1';
 const VERSIONS_KEY = 'inkwell.versions.v1';
 
+const DEFAULT_SETTINGS = {
+  apiKey: '',
+  model: 'gemini-3.7-flash',
+  thinkingLevel: 'LOW',
+  theme: '', // '' = follow system; or 'paper' | 'sepia' | 'midnight' | 'noir'
+  webSearch: false,
+};
+
 const state = {
-  settings: loadJSON(SETTINGS_KEY, {
-    apiKey: '',
-    model: 'gemini-3.7-flash',
-    thinkingLevel: 'LOW',
-  }),
-  versions: loadJSON(VERSIONS_KEY, []), // [{ id, ts, instruction, content }]
+  settings: { ...DEFAULT_SETTINGS, ...loadJSON(SETTINGS_KEY, {}) },
+  versions: loadJSON(VERSIONS_KEY, []), // [{ id, ts, instruction, content, sources? }]
   selected: -1, // index into versions; -1 = none
   view: 'blog', // 'blog' | 'diff'
   generating: false,
+  starters: null, // [{ label, draft, instruction }] once loaded
+  startersLoading: false,
 };
 state.selected = state.versions.length - 1;
 
@@ -79,7 +85,59 @@ const els = {
   confettiHost: $('confettiHost'),
   brand: $('brand'),
   dividerOrb: $('dividerOrb'),
+  themeBtn: $('themeBtn'),
+  themeMenu: $('themeMenu'),
+  webSearchBtn: $('webSearchBtn'),
+  startersRow: $('startersRow'),
+  refreshStartersBtn: $('refreshStartersBtn'),
 };
+
+/* ------------------------------------------------------------------ */
+/* Themes                                                             */
+/* ------------------------------------------------------------------ */
+
+const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+function resolvedTheme() {
+  return state.settings.theme || (systemDark.matches ? 'midnight' : 'paper');
+}
+
+function applyTheme() {
+  const theme = resolvedTheme();
+  document.documentElement.dataset.theme = theme;
+  els.themeMenu.querySelectorAll('.theme-opt').forEach((b) => {
+    b.classList.toggle('is-active', b.dataset.theme === theme);
+  });
+}
+
+function toggleThemeMenu(open) {
+  const show = open ?? els.themeMenu.hidden;
+  els.themeMenu.hidden = !show;
+  els.themeBtn.setAttribute('aria-expanded', String(show));
+}
+
+els.themeBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleThemeMenu();
+});
+
+els.themeMenu.addEventListener('click', (e) => {
+  const opt = e.target.closest('.theme-opt');
+  if (!opt) return;
+  state.settings.theme = opt.dataset.theme;
+  saveSettings();
+  applyTheme();
+  toggleThemeMenu(false);
+});
+
+document.addEventListener('click', (e) => {
+  if (!els.themeMenu.hidden && !e.target.closest('.theme-wrap')) toggleThemeMenu(false);
+});
+
+// Follow the OS until the user picks a theme explicitly.
+systemDark.addEventListener('change', () => {
+  if (!state.settings.theme) applyTheme();
+});
 
 /* ------------------------------------------------------------------ */
 /* Rendering                                                          */
@@ -127,6 +185,7 @@ function renderOutput({ animateDiff = false } = {}) {
     els.diffView.hidden = true;
     els.statsBar.hidden = true;
     els.changesBadge.hidden = true;
+    ensureStarters();
     return;
   }
 
@@ -151,6 +210,7 @@ function renderOutput({ animateDiff = false } = {}) {
     els.blogView.hidden = false;
     els.diffView.hidden = true;
     els.blogView.innerHTML = marked.parse(version.content);
+    if (version.sources?.length) els.blogView.appendChild(makeSourcesBlock(version.sources));
   } else {
     els.blogView.hidden = true;
     els.diffView.hidden = false;
@@ -243,6 +303,32 @@ function mark(text, cls) {
   return m;
 }
 
+/** Grounding sources come from the open web — build with DOM APIs, never innerHTML. */
+function makeSourcesBlock(sources) {
+  const wrap = document.createElement('aside');
+  wrap.className = 'sources';
+
+  const head = document.createElement('div');
+  head.className = 'sources-head';
+  head.textContent = '🌐 Grounded with Google Search';
+  wrap.appendChild(head);
+
+  const list = document.createElement('ul');
+  list.className = 'sources-list';
+  for (const s of sources) {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = s.uri;
+    a.target = '_blank';
+    a.rel = 'noreferrer noopener';
+    a.textContent = s.title;
+    li.appendChild(a);
+    list.appendChild(li);
+  }
+  wrap.appendChild(list);
+  return wrap;
+}
+
 /* ------------------------------------------------------------------ */
 /* Generation flow                                                    */
 /* ------------------------------------------------------------------ */
@@ -285,6 +371,7 @@ async function generate() {
   els.streamNote.hidden = false;
 
   let text = '';
+  let sources = null;
   let renderQueued = false;
   const paintStream = () => {
     renderQueued = false;
@@ -300,10 +387,13 @@ async function generate() {
       draft,
       instruction,
       previous: latest?.content ?? null,
+      useSearch: state.settings.webSearch,
     });
 
-    for await (const chunk of stream) {
-      text += chunk;
+    for await (const ev of stream) {
+      if (ev.sources) sources = ev.sources;
+      if (!ev.text) continue;
+      text += ev.text;
       if (!renderQueued) {
         renderQueued = true;
         requestAnimationFrame(paintStream);
@@ -319,6 +409,7 @@ async function generate() {
       ts: Date.now(),
       instruction: instruction || (isFirst ? 'First draft' : 'Revision'),
       content,
+      ...(sources ? { sources } : {}),
     });
     saveVersions();
     state.selected = state.versions.length - 1;
@@ -448,6 +539,112 @@ function closeSettings() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Web search toggle                                                  */
+/* ------------------------------------------------------------------ */
+
+function syncWebSearchBtn() {
+  els.webSearchBtn.classList.toggle('is-on', state.settings.webSearch);
+  els.webSearchBtn.setAttribute('aria-pressed', String(state.settings.webSearch));
+}
+
+els.webSearchBtn.addEventListener('click', () => {
+  state.settings.webSearch = !state.settings.webSearch;
+  saveSettings();
+  syncWebSearchBtn();
+  toast(
+    state.settings.webSearch
+      ? 'Web grounding on 🌐 — Gemini will pull in live Google Search results'
+      : 'Web grounding off — writing from the model alone'
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* Conversation starters                                              */
+/* ------------------------------------------------------------------ */
+
+const FALLBACK_STARTERS = [
+  { label: '🌅 The case against 5am', draft: '# The Case Against Waking Up at 5am\n- where hustle-morning culture came from\n- what sleep research actually says\n- night owls who built empires\n- designing a morning around your chronotype', instruction: 'Write a punchy 600-word contrarian post from this outline' },
+  { label: '🍜 Recipes are just algorithms', draft: '# Recipes Are Just Algorithms You Can Eat\n- what a recipe and a program have in common\n- inputs, loops and error handling in the kitchen\n- why grandmothers are great debuggers\n- an exercise: refactor your favorite dish', instruction: 'Write a playful 700-word post for curious non-programmers' },
+  { label: '🤖 My week with an AI copilot', draft: '# A Week of Letting AI Draft Everything First\n- the experiment and the rules\n- where it saved hours\n- where it fell on its face\n- what I now let it own, and what I took back', instruction: 'Write a candid first-person 800-word post from this outline' },
+  { label: '💸 Why budgets fail', draft: '# Budgets Fail Because Feelings Beat Spreadsheets\n- the psychology of the impulse buy\n- why tracking apps rarely change behavior\n- friction as a money strategy\n- three tiny systems that actually stick', instruction: 'Write a warm, practical 650-word post from this outline' },
+  { label: '🗺️ In defense of getting lost', draft: '# In Defense of Getting Lost on Purpose\n- travel before turn-by-turn navigation\n- what wandering does to memory and mood\n- a game: the coin-flip walk\n- souvenirs you can only find off-route', instruction: 'Write an evocative 600-word essay from this outline' },
+  { label: '🧠 Habits are interfaces', draft: '# Your Habits Are an Interface to Your Future Self\n- habits as buttons you press daily\n- default settings vs conscious design\n- shrinking a habit until it is laughably easy\n- reviewing your "UI" once a season', instruction: 'Write a crisp 700-word post with concrete examples' },
+  { label: '🎨 Taste is a skill', draft: '# Taste Is a Skill, Not a Gift\n- what "good taste" actually is\n- collecting influences deliberately\n- the gap between your taste and your output\n- exercises to train your eye this month', instruction: 'Write an encouraging 700-word post for makers' },
+  { label: '📚 History rhymes with your feed', draft: '# The Printing Press Panic, and Your Feed\n- the moral panic when print arrived\n- what critics feared then vs now\n- what actually changed for readers\n- lessons for living through the AI wave', instruction: 'Write a thoughtful 750-word post connecting past and present' },
+];
+
+function sampleFallbackStarters() {
+  const pool = [...FALLBACK_STARTERS];
+  const out = [];
+  while (out.length < 4 && pool.length) {
+    out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  }
+  return out;
+}
+
+function renderStarterSkeletons() {
+  els.startersRow.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const sk = document.createElement('span');
+    sk.className = 'starter-chip starter-skeleton';
+    sk.style.width = `${110 + ((i * 37) % 70)}px`;
+    els.startersRow.appendChild(sk);
+  }
+}
+
+function renderStarters() {
+  els.startersRow.innerHTML = '';
+  for (const s of state.starters ?? []) {
+    const chip = document.createElement('button');
+    chip.className = 'starter-chip';
+    chip.textContent = s.label;
+    chip.title = s.instruction || 'Load this idea into the draft pane';
+    chip.addEventListener('click', () => {
+      els.draft.value = s.draft;
+      els.instruction.value = s.instruction || '';
+      updateWordCount();
+      els.draft.focus();
+      toast('Starter loaded — tweak it, then hit Generate ✦');
+    });
+    els.startersRow.appendChild(chip);
+  }
+}
+
+async function loadStarters() {
+  if (state.startersLoading) return;
+  state.startersLoading = true;
+  renderStarterSkeletons();
+
+  try {
+    if (!apiKey()) throw new Error('no key');
+    state.starters = await fetchStarters({
+      apiKey: apiKey(),
+      model: state.settings.model,
+      useSearch: state.settings.webSearch,
+    });
+  } catch (err) {
+    // Offline / no key / bad JSON: shuffle the built-in deck instead.
+    console.warn('Starters fell back to built-ins:', err);
+    state.starters = sampleFallbackStarters();
+  } finally {
+    state.startersLoading = false;
+    renderStarters();
+  }
+}
+
+/** Fetch once per app load, the first time the empty state is shown. */
+function ensureStarters() {
+  if (state.starters || state.startersLoading) return;
+  loadStarters();
+}
+
+els.refreshStartersBtn.addEventListener('click', () => {
+  if (state.startersLoading) return;
+  state.starters = null;
+  loadStarters();
+});
+
+/* ------------------------------------------------------------------ */
 /* Wiring                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -472,7 +669,10 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     generate();
   }
-  if (e.key === 'Escape' && !els.settingsModal.hidden) closeSettings();
+  if (e.key === 'Escape') {
+    if (!els.settingsModal.hidden) closeSettings();
+    if (!els.themeMenu.hidden) toggleThemeMenu(false);
+  }
 });
 
 els.instruction.addEventListener('keydown', (e) => {
@@ -546,6 +746,8 @@ els.brand.addEventListener('click', () => {
 /* Boot                                                               */
 /* ------------------------------------------------------------------ */
 
+applyTheme();
+syncWebSearchBtn();
 updateWordCount();
 syncViewToggle();
 render();
