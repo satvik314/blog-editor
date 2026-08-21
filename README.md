@@ -17,6 +17,16 @@ to the individual words that changed.
   or click *Make this my draft* to pull a version back into the editor
 - **Micro-interactions everywhere** — springy buttons, staggered diff reveals,
   counting stat chips, confetti on your first draft, a wobbling ink-drop logo 🖋️
+- **Four themes** — 🫖 Paper (warm light), 📜 Sepia (old library), 🌙 Midnight (dark),
+  and 🕯️ Noir (candlelit black-and-gold). Pick one from the palette button in the
+  top bar; until you do, Inkwell follows your system's light/dark preference
+- **🌐 Web grounding** — toggle the **Web** button next to Generate and Gemini
+  grounds the post in live [Google Search](https://ai.google.dev/gemini-api/docs/google-search)
+  results, with the sources it used listed under the post
+- **Conversation starters** — a fresh, Gemini-generated set of blog ideas appears on
+  the empty page every time the app loads (with web grounding on, at least one is
+  pulled from today's news). Click a chip to load its outline and instruction, or
+  hit ↻ for a new batch
 
 Versions and settings persist in `localStorage`, so your work survives a refresh.
 
