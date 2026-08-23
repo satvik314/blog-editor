@@ -18,7 +18,12 @@ to the individual words that changed.
 - **Micro-interactions everywhere** — springy buttons, staggered diff reveals,
   counting stat chips, confetti on your first draft, a wobbling ink-drop logo 🖋️
 
-Versions and settings persist in `localStorage`, so your work survives a refresh.
+- **Cloud version history** — point Inkwell at a Supabase project and every version
+  lands in Postgres, so your drafts follow you between browsers and machines
+
+Settings (and your API key) stay in `localStorage`. Version history goes to Supabase
+when it's configured, and falls back to `localStorage` when it isn't — either way your
+work survives a refresh.
 
 ## 🚀 Getting started
 
@@ -33,6 +38,44 @@ Then add your Gemini API key, either:
 2. **Via env file** — `cp .env.example .env.local` and set `VITE_GEMINI_API_KEY`
 
 Get a free key at [Google AI Studio](https://aistudio.google.com/apikey).
+
+### Optional: sync versions to Supabase
+
+Out of the box, version history lives in `localStorage` — one browser, one machine.
+To sync it instead, add your project's credentials to `.env.local`:
+
+```bash
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_…
+```
+
+Both come from **Supabase → Project Settings → API**. Create the table with:
+
+```sql
+create table public.versions (
+  id          uuid primary key default gen_random_uuid(),
+  seq         bigint generated always as identity,
+  instruction text        not null default '',
+  content     text        not null,
+  created_at  timestamptz not null default now()
+);
+create index versions_seq_idx on public.versions (seq);
+
+alter table public.versions enable row level security;
+create policy "anon can read versions"   on public.versions for select to anon, authenticated using (true);
+create policy "anon can insert versions" on public.versions for insert to anon, authenticated with check (true);
+create policy "anon can delete versions" on public.versions for delete to anon, authenticated using (true);
+```
+
+The badge in the top-right tells you where your versions are going —
+**☁ Synced**, **☁ Offline** (Supabase unreachable, kept locally), or **⌂ Local only**
+(no credentials set).
+
+> **Heads up on the security model.** Inkwell is a single-user tool, so these policies
+> let anyone holding the publishable key read, add and delete versions — that key ships
+> in the browser bundle, so treat a deployed instance as public. There's deliberately no
+> `update` policy, which makes version history append-only. If you deploy this somewhere
+> others can reach, add Supabase Auth and scope the rows to a `user_id` first.
 
 ## 🕹️ How to use it
 
@@ -62,3 +105,4 @@ which is what keeps the diffs surgical.
 - [`@google/genai`](https://www.npmjs.com/package/@google/genai) — official Google Gen AI SDK (streaming)
 - [`diff`](https://www.npmjs.com/package/diff) — line + word diffing
 - [`marked`](https://www.npmjs.com/package/marked) — Markdown rendering
+- [`@supabase/supabase-js`](https://www.npmjs.com/package/@supabase/supabase-js) — optional Postgres-backed version history

@@ -835,6 +835,47 @@ mark.word-del {
    Buttons, modal, toasts
    --------------------------------------------------------------- */
 
+/* Topbar right: sync state + settings */
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Where the version history actually lives — Postgres, or just this browser. */
+.sync-pill {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  color: var(--ink-faint);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.sync-pill.is-cloud {
+  color: var(--add);
+  border-color: var(--add-mark);
+  background: var(--add-bg);
+}
+
+.sync-pill.is-degraded {
+  color: var(--mod);
+  border-color: var(--mod-mark);
+  background: var(--mod-bg);
+}
+
+@media (max-width: 720px) {
+  .sync-pill { display: none; }
+}
+
 .icon-btn {
   position: relative;
   border: 1.5px solid var(--line);
