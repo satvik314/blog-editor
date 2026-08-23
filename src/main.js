@@ -2,6 +2,7 @@ import './style.css';
 import { marked } from 'marked';
 import { streamBlog, cleanOutput } from './gemini.js';
 import { computeLineDiff, diffStats, collapseContext } from './diff-engine.js';
+import { isCloud, loadVersions, saveVersion, clearVersions } from './store.js';
 
 marked.setOptions({ gfm: true, breaks: false });
 
@@ -10,7 +11,6 @@ marked.setOptions({ gfm: true, breaks: false });
 /* ------------------------------------------------------------------ */
 
 const SETTINGS_KEY = 'inkwell.settings.v1';
-const VERSIONS_KEY = 'inkwell.versions.v1';
 
 const state = {
   settings: loadJSON(SETTINGS_KEY, {
@@ -18,12 +18,11 @@ const state = {
     model: 'gemini-3.7-flash',
     thinkingLevel: 'LOW',
   }),
-  versions: loadJSON(VERSIONS_KEY, []), // [{ id, ts, instruction, content }]
+  versions: [], // [{ id, ts, instruction, content }] — hydrated from the store on boot
   selected: -1, // index into versions; -1 = none
   view: 'blog', // 'blog' | 'diff'
   generating: false,
 };
-state.selected = state.versions.length - 1;
 
 function loadJSON(key, fallback) {
   try {
@@ -35,7 +34,6 @@ function loadJSON(key, fallback) {
 }
 
 const saveSettings = () => localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
-const saveVersions = () => localStorage.setItem(VERSIONS_KEY, JSON.stringify(state.versions));
 
 function apiKey() {
   return state.settings.apiKey || import.meta.env.VITE_GEMINI_API_KEY || '';
@@ -77,6 +75,7 @@ const els = {
   clearHistoryBtn: $('clearHistoryBtn'),
   toastHost: $('toastHost'),
   confettiHost: $('confettiHost'),
+  syncPill: $('syncPill'),
   brand: $('brand'),
   dividerOrb: $('dividerOrb'),
 };
@@ -314,13 +313,13 @@ async function generate() {
     if (!content) throw new Error('The model returned an empty response.');
 
     const isFirst = state.versions.length === 0;
-    state.versions.push({
+    const version = {
       id: crypto.randomUUID(),
       ts: Date.now(),
       instruction: instruction || (isFirst ? 'First draft' : 'Revision'),
       content,
-    });
-    saveVersions();
+    };
+    state.versions.push(version);
     state.selected = state.versions.length - 1;
 
     els.instruction.value = '';
@@ -336,6 +335,16 @@ async function generate() {
       const stats = diffStats(computeLineDiff(latest.content, content));
       toast(`v${state.versions.length} ready — +${stats.add} ~${stats.mod} −${stats.del} lines`);
     }
+
+    // Persist after painting — the local mirror is written synchronously inside
+    // saveVersion, so a slow insert never holds up the diff reveal.
+    saveVersion(version, state.versions).then((saved) => {
+      if (!saved.synced) {
+        console.error(saved.error);
+        renderSyncPill(true);
+        toast('Kept in this browser — Supabase did not accept that version ☁️', 'error');
+      }
+    });
   } catch (err) {
     console.error(err);
     toast(friendlyError(err), 'error');
@@ -451,6 +460,26 @@ function closeSettings() {
 /* Wiring                                                             */
 /* ------------------------------------------------------------------ */
 
+/** Tiny topbar badge: is this browser writing to Postgres, or just to itself? */
+function renderSyncPill(degraded = false) {
+  const pill = els.syncPill;
+  pill.hidden = false;
+
+  if (!isCloud) {
+    pill.className = 'sync-pill is-local';
+    pill.textContent = '⌂ Local only';
+    pill.title =
+      'Versions live in this browser. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to sync them.';
+    return;
+  }
+
+  pill.className = `sync-pill ${degraded ? 'is-degraded' : 'is-cloud'}`;
+  pill.textContent = degraded ? '☁ Offline' : '☁ Synced';
+  pill.title = degraded
+    ? 'Supabase is unreachable — versions are being kept in this browser only.'
+    : 'Versions are saved to your Supabase project.';
+}
+
 function syncViewToggle() {
   els.viewToggle.querySelectorAll('.seg-btn').forEach((b) => {
     b.classList.toggle('is-active', b.dataset.view === state.view);
@@ -525,14 +554,21 @@ els.settingsSave.addEventListener('click', () => {
   toast('Settings saved ✓');
 });
 
-els.clearHistoryBtn.addEventListener('click', () => {
+els.clearHistoryBtn.addEventListener('click', async () => {
   if (state.versions.length && !confirm('Clear all versions? This cannot be undone.')) return;
   state.versions = [];
   state.selected = -1;
-  saveVersions();
   closeSettings();
   render();
-  toast('Fresh inkwell — history cleared 🫙');
+
+  const cleared = await clearVersions();
+  if (cleared.synced) {
+    toast('Fresh inkwell — history cleared 🫙');
+  } else {
+    console.error(cleared.error);
+    renderSyncPill(true);
+    toast('Cleared here, but Supabase still holds the old versions ☁️', 'error');
+  }
 });
 
 // A tiny hello: wobble the ink drop when you poke the brand.
@@ -548,7 +584,19 @@ els.brand.addEventListener('click', () => {
 
 updateWordCount();
 syncViewToggle();
+renderSyncPill();
 render();
+
+(async () => {
+  const { versions, degraded } = await loadVersions();
+  state.versions = versions;
+  state.selected = versions.length - 1;
+  render();
+  if (degraded) {
+    renderSyncPill(true);
+    toast('Could not reach Supabase — showing the copy saved in this browser ☁️', 'error');
+  }
+})();
 
 if (!apiKey()) {
   setTimeout(() => toast('Welcome to Inkwell 🖋️ Add your Gemini API key in Settings to begin.'), 700);

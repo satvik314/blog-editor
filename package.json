@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.16.0",
+    "@supabase/supabase-js": "^2.112.3",
     "diff": "^7.0.0",
     "marked": "^15.0.0"
   },
